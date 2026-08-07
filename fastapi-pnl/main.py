@@ -1,4 +1,12 @@
 from fastapi import FastAPI
+from fastapi import HTTPException
+from pydantic import BaseModel
+
+class Transaction(BaseModel):
+    coin: str
+    action: str
+    amount: float
+    price: float
 
 app = FastAPI()
 
@@ -29,3 +37,13 @@ def greet(name = "stranger"):
 @app.get("/coin/{coin_id}/convert")
 def infor(coin_id, currency = "usd"):
     return {"coin": coin_id, "currency": currency}
+
+@app.post("/transaction")
+def create_transaction(tx: Transaction):
+    if tx.amount <= 0:
+        raise HTTPException(status_code=400, detail="Invalid amount value")
+    elif tx.price <= 0:
+        raise HTTPException(status_code=400, detail="Invalid price")
+    else:
+        total = tx.amount * tx.price
+        return {"coin": tx.coin, "action": tx.action, "amount": tx.amount, "price": tx.price, "total": total}
