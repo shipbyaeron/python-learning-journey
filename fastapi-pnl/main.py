@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from fastapi import HTTPException
 from pydantic import BaseModel
+import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Transaction(BaseModel):
     coin: str
@@ -47,3 +52,19 @@ def create_transaction(tx: Transaction):
     else:
         total = tx.amount * tx.price
         return {"coin": tx.coin, "action": tx.action, "amount": tx.amount, "price": tx.price, "total": total}
+    
+@app.get("/price/{coin_id}")
+def get_price(coin_id):
+    priceUrl = "https://api.coingecko.com/api/v3/simple/price"
+    headers = {"x-cg-demo-api-key": os.environ["COINGECKO_API_KEY"]}
+    params = {
+        "ids": coin_id,
+        "vs_currencies": "usd"
+    }
+    response = requests.get(priceUrl, headers=headers, params=params)
+    priceData = response.json()
+
+    if coin_id not in priceData:
+        raise HTTPException(status_code=404, detail="This coin doesn't exist. Try another one.")
+    else:
+        return {"coin": coin_id, "price": priceData[coin_id]["usd"]}
