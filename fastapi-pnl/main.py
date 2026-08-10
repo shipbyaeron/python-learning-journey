@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import requests
 import os
 from dotenv import load_dotenv
+import sqlite3
 
 load_dotenv()
 
@@ -14,6 +15,16 @@ class Transaction(BaseModel):
     price: float
 
 app = FastAPI()
+
+def get_db():
+	conn = sqlite3.connect("pnl.db")
+	return conn
+
+conn = get_db()
+cursor = conn.cursor()
+cursor.execute("CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, coin TEXT, action TEXT, amount REAL, price REAL, total REAL)")
+conn.commit()
+conn.close()
 
 @app.get("/")
 def read_root():
@@ -51,7 +62,15 @@ def create_transaction(tx: Transaction):
         raise HTTPException(status_code=400, detail="Invalid price")
     else:
         total = tx.amount * tx.price
-        return {"coin": tx.coin, "action": tx.action, "amount": tx.amount, "price": tx.price, "total": total}
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO transactions (coin, action, amount, price, total) VALUES (?, ?, ?, ?, ?)", 
+            (tx.coin, tx.action, tx.amount, tx.price, total)
+        )
+        conn.commit()
+        conn.close()
+        return {"message": "Transactions are saved", "coin": tx.coin, "action": tx.action, "amount": tx.amount, "price": tx.price, "total": total}
     
 @app.get("/price/{coin_id}")
 def get_price(coin_id):
@@ -68,3 +87,12 @@ def get_price(coin_id):
         raise HTTPException(status_code=404, detail="This coin doesn't exist. Try another one.")
     else:
         return {"coin": coin_id, "price": priceData[coin_id]["usd"]}
+
+@app.get("/transactions")
+def get_transaction():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM transactions")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
