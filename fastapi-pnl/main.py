@@ -17,8 +17,9 @@ class Transaction(BaseModel):
 app = FastAPI()
 
 def get_db():
-	conn = sqlite3.connect("pnl.db")
-	return conn
+    conn = sqlite3.connect("pnl.db")
+    conn.row_factory = sqlite3.Row
+    return conn
 
 conn = get_db()
 cursor = conn.cursor()
@@ -96,3 +97,57 @@ def get_transaction():
     rows = cursor.fetchall()
     conn.close()
     return rows
+
+@app.get("/transactions/{id}")
+def get_tx_by_id(id:int):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM transactions WHERE id = ?", (id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return row
+    else:
+        raise HTTPException(status_code=404, detail="Invalid id number")
+
+# @app.get("/transactions/{id}")
+# def get_tx_by_id(id:int):
+#     conn = get_db()
+#     cursor = conn.cursor()
+#     cursor.execute("SELECT * FROM transactions")
+#     rows = cursor.fetchall()
+#     conn.close()
+#     for row in rows:
+#         if row["id"] == id:
+#             return row
+#     else:
+#         raise HTTPException(status_code=404, detail="Invalid id number")
+
+@app.delete("/transactions/{id}")
+def del_tx(id:int):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM transactions WHERE id = ?", (id,))
+    row = cursor.fetchone()
+    if row:
+        cursor.execute("DELETE FROM transactions WHERE id = ?", (id,))
+        conn.commit()
+        conn.close()
+        return {"message": f"Delete transaction {id} successfully"}
+    else:
+        raise HTTPException(status_code=404, detail="Invalid id number")
+
+@app.put("/transactions/{id}")
+def alter_tx(id:int, tx: Transaction):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM transactions WHERE id = ?", (id,))
+    row = cursor.fetchone()
+    if row:
+        new_total = tx.amount * tx.price
+        cursor.execute("UPDATE transactions SET coin = ?, action = ?, amount = ?, price = ?, total = ? WHERE id = ?", (tx.coin, tx.action, tx.amount, tx.price, new_total, id,))
+        conn.commit()
+        conn.close()
+        return {"message": f"Transaction {id} is updated successfully"}
+    else:
+        raise HTTPException(status_code=404, detail="Invalid id number")
