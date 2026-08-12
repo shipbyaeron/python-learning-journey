@@ -4,9 +4,11 @@ from pydantic import BaseModel
 import requests
 import os
 from dotenv import load_dotenv
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 load_dotenv()
+dataURL = os.getenv("DATABASE_URL")
 
 class Transaction(BaseModel):
     coin: str
@@ -17,13 +19,12 @@ class Transaction(BaseModel):
 app = FastAPI()
 
 def get_db():
-    conn = sqlite3.connect("pnl.db")
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(dataURL, cursor_factory=RealDictCursor)
     return conn
 
 conn = get_db()
 cursor = conn.cursor()
-cursor.execute("CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, coin TEXT, action TEXT, amount REAL, price REAL, total REAL)")
+cursor.execute("CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, coin TEXT, action TEXT, amount NUMERIC, price NUMERIC, total NUMERIC)")
 conn.commit()
 conn.close()
 
@@ -31,29 +32,9 @@ conn.close()
 def read_root():
     return {"message":"Hello, this is my Crypto P&L API"}
 
-@app.get("/hello")
-def hello():
-    return {"message":"Hello, today is a beautiful day!"}
-
 @app.get("/about")
 def about():
     return {"name":"Crypto P&L Tracker", "version":"v1.0", "feature":"Tracking crypto position & Calculating ROI", "author":"Aeron"}
-
-@app.get("/coin/{coin_id}")
-def get_coin(coin_id):
-    return {"coin": coin_id}
-
-@app.get("/double/{number}")
-def double(number:int):
-    return number * 2
-
-@app.get("/greet")
-def greet(name = "stranger"):
-    return f"Hello, {name}"
-
-@app.get("/coin/{coin_id}/convert")
-def infor(coin_id, currency = "usd"):
-    return {"coin": coin_id, "currency": currency}
 
 @app.post("/transaction")
 def create_transaction(tx: Transaction):
@@ -66,7 +47,7 @@ def create_transaction(tx: Transaction):
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO transactions (coin, action, amount, price, total) VALUES (?, ?, ?, ?, ?)", 
+            "INSERT INTO transactions (coin, action, amount, price, total) VALUES (%s, %s, %s, %s, %s)", 
             (tx.coin, tx.action, tx.amount, tx.price, total)
         )
         conn.commit()
@@ -76,7 +57,7 @@ def create_transaction(tx: Transaction):
 @app.get("/price/{coin_id}")
 def get_price(coin_id):
     priceUrl = "https://api.coingecko.com/api/v3/simple/price"
-    headers = {"x-cg-demo-api-key": os.environ["COINGECKO_API_KEY"]}
+    headers = {"x-cg-demo-api-key": os.getenv("COINGECKO_API_KEY")}
     params = {
         "ids": coin_id,
         "vs_currencies": "usd"
@@ -102,7 +83,7 @@ def get_transaction():
 def get_tx_by_id(id:int):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM transactions WHERE id = ?", (id,))
+    cursor.execute("SELECT * FROM transactions WHERE id = %s", (id,))
     row = cursor.fetchone()
     conn.close()
     if row:
@@ -110,27 +91,14 @@ def get_tx_by_id(id:int):
     else:
         raise HTTPException(status_code=404, detail="Invalid id number")
 
-# @app.get("/transactions/{id}")
-# def get_tx_by_id(id:int):
-#     conn = get_db()
-#     cursor = conn.cursor()
-#     cursor.execute("SELECT * FROM transactions")
-#     rows = cursor.fetchall()
-#     conn.close()
-#     for row in rows:
-#         if row["id"] == id:
-#             return row
-#     else:
-#         raise HTTPException(status_code=404, detail="Invalid id number")
-
 @app.delete("/transactions/{id}")
 def del_tx(id:int):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM transactions WHERE id = ?", (id,))
+    cursor.execute("SELECT * FROM transactions WHERE id = %s", (id,))
     row = cursor.fetchone()
     if row:
-        cursor.execute("DELETE FROM transactions WHERE id = ?", (id,))
+        cursor.execute("DELETE FROM transactions WHERE id = %s", (id,))
         conn.commit()
         conn.close()
         return {"message": f"Delete transaction {id} successfully"}
@@ -141,11 +109,11 @@ def del_tx(id:int):
 def alter_tx(id:int, tx: Transaction):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM transactions WHERE id = ?", (id,))
+    cursor.execute("SELECT * FROM transactions WHERE id = %s", (id,))
     row = cursor.fetchone()
     if row:
         new_total = tx.amount * tx.price
-        cursor.execute("UPDATE transactions SET coin = ?, action = ?, amount = ?, price = ?, total = ? WHERE id = ?", (tx.coin, tx.action, tx.amount, tx.price, new_total, id,))
+        cursor.execute("UPDATE transactions SET coin = %s, action = %s, amount = %s, price = %s, total = %s WHERE id = %s", (tx.coin, tx.action, tx.amount, tx.price, new_total, id,))
         conn.commit()
         conn.close()
         return {"message": f"Transaction {id} is updated successfully"}
