@@ -21,10 +21,9 @@ cursor.execute(
     ("solana", "sell", 10, 200)
 )
 
-cursor.execute("SELECT * FROM transactions")
-
 conn.commit()
 
+cursor.execute("SELECT * FROM transactions")
 rows = cursor.fetchall()
 print(rows)
 
