@@ -1,5 +1,4 @@
-from fastapi import FastAPI
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 import requests
 import os
@@ -20,13 +19,19 @@ app = FastAPI()
 
 def get_db():
     conn = psycopg2.connect(dataURL, cursor_factory=RealDictCursor)
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
-conn = get_db()
-cursor = conn.cursor()
-cursor.execute("CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, coin TEXT, action TEXT, amount NUMERIC, price NUMERIC, total NUMERIC)")
-conn.commit()
-conn.close()
+def init_db():
+    conn = psycopg2.connect(dataURL, cursor_factory=RealDictCursor)
+    cursor = conn.cursor()
+    cursor.execute("CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, coin TEXT, action TEXT, amount NUMERIC, price NUMERIC, total NUMERIC)")
+    conn.commit()
+    conn.close()
+
+init_db()
 
 @app.get("/")
 def read_root():
@@ -37,21 +42,19 @@ def about():
     return {"name":"Crypto P&L Tracker", "version":"v1.0", "feature":"Tracking crypto position & Calculating ROI", "author":"Aeron"}
 
 @app.post("/transaction")
-def create_transaction(tx: Transaction):
+def create_transaction(tx: Transaction, conn = Depends(get_db)):
     if tx.amount <= 0:
         raise HTTPException(status_code=400, detail="Invalid amount value")
     elif tx.price <= 0:
         raise HTTPException(status_code=400, detail="Invalid price")
     else:
         total = tx.amount * tx.price
-        conn = get_db()
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO transactions (coin, action, amount, price, total) VALUES (%s, %s, %s, %s, %s)", 
             (tx.coin, tx.action, tx.amount, tx.price, total)
         )
         conn.commit()
-        conn.close()
         return {"message": "Transactions are saved", "coin": tx.coin, "action": tx.action, "amount": tx.amount, "price": tx.price, "total": total}
     
 @app.get("/price/{coin_id}")
@@ -71,43 +74,36 @@ def get_price(coin_id):
         return {"coin": coin_id, "price": priceData[coin_id]["usd"]}
 
 @app.get("/transactions")
-def get_transaction():
-    conn = get_db()
+def get_transaction(conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM transactions")
     rows = cursor.fetchall()
-    conn.close()
     return rows
 
 @app.get("/transactions/{id}")
-def get_tx_by_id(id:int):
-    conn = get_db()
+def get_tx_by_id(id:int, conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM transactions WHERE id = %s", (id,))
     row = cursor.fetchone()
-    conn.close()
     if row:
         return row
     else:
         raise HTTPException(status_code=404, detail="Invalid id number")
 
 @app.delete("/transactions/{id}")
-def del_tx(id:int):
-    conn = get_db()
+def del_tx(id:int, conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM transactions WHERE id = %s", (id,))
     row = cursor.fetchone()
     if row:
         cursor.execute("DELETE FROM transactions WHERE id = %s", (id,))
         conn.commit()
-        conn.close()
         return {"message": f"Delete transaction {id} successfully"}
     else:
         raise HTTPException(status_code=404, detail="Invalid id number")
 
 @app.put("/transactions/{id}")
-def alter_tx(id:int, tx: Transaction):
-    conn = get_db()
+def alter_tx(id:int, tx: Transaction, conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM transactions WHERE id = %s", (id,))
     row = cursor.fetchone()
@@ -115,7 +111,6 @@ def alter_tx(id:int, tx: Transaction):
         new_total = tx.amount * tx.price
         cursor.execute("UPDATE transactions SET coin = %s, action = %s, amount = %s, price = %s, total = %s WHERE id = %s", (tx.coin, tx.action, tx.amount, tx.price, new_total, id,))
         conn.commit()
-        conn.close()
         return {"message": f"Transaction {id} is updated successfully"}
     else:
         raise HTTPException(status_code=404, detail="Invalid id number")
