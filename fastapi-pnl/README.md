@@ -1,5 +1,7 @@
 # Crypto P&L Tracker API
 
+![CI](https://github.com/shipbyaeron/python-learning-journey/actions/workflows/ci.yml/badge.svg)
+
 An all-in-one tracker for your crypto positions.
 
 **Live demo v1.0:** https://crypto-pnl-api.onrender.com/docs
