@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
 from pydantic import BaseModel
 import requests
 import os
@@ -8,6 +8,10 @@ from psycopg2.extras import RealDictCursor
 
 load_dotenv()
 dataURL = os.getenv("DATABASE_URL")
+
+API_KEY = os.getenv("APP_API_KEY")
+if not API_KEY:
+    raise ValueError("Security error! Pls add the APP_API_KEY to .env to run this")
 
 class Transaction(BaseModel):
     coin: str
@@ -33,6 +37,10 @@ def init_db():
 
 init_db()
 
+def check_auth(x_api_key: str | None = Header(None)):
+    if not x_api_key or x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key!")
+
 @app.get("/")
 def read_root():
     return {"message":"Hello, this is my Crypto P&L API"}
@@ -41,7 +49,7 @@ def read_root():
 def about():
     return {"name":"Crypto P&L Tracker", "version":"v1.0", "feature":"Tracking crypto position & Calculating ROI", "author":"Aeron"}
 
-@app.post("/transaction")
+@app.post("/transaction", dependencies=[Depends(check_auth)])
 def create_transaction(tx: Transaction, conn = Depends(get_db)):
     if tx.amount <= 0:
         raise HTTPException(status_code=400, detail="Invalid amount value")
@@ -73,14 +81,14 @@ def get_price(coin_id):
     else:
         return {"coin": coin_id, "price": priceData[coin_id]["usd"]}
 
-@app.get("/transactions")
+@app.get("/transactions", dependencies=[Depends(check_auth)])
 def get_transaction(conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM transactions")
     rows = cursor.fetchall()
     return rows
 
-@app.get("/transactions/{id}")
+@app.get("/transactions/{id}", dependencies=[Depends(check_auth)])
 def get_tx_by_id(id:int, conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM transactions WHERE id = %s", (id,))
@@ -90,7 +98,7 @@ def get_tx_by_id(id:int, conn = Depends(get_db)):
     else:
         raise HTTPException(status_code=404, detail="Invalid id number")
 
-@app.delete("/transactions/{id}")
+@app.delete("/transactions/{id}", dependencies=[Depends(check_auth)])
 def del_tx(id:int, conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM transactions WHERE id = %s", (id,))
@@ -102,7 +110,7 @@ def del_tx(id:int, conn = Depends(get_db)):
     else:
         raise HTTPException(status_code=404, detail="Invalid id number")
 
-@app.put("/transactions/{id}")
+@app.put("/transactions/{id}", dependencies=[Depends(check_auth)])
 def alter_tx(id:int, tx: Transaction, conn = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM transactions WHERE id = %s", (id,))
