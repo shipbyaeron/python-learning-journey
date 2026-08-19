@@ -1,6 +1,11 @@
 import streamlit as st
 import requests
 import pandas as pd
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+API_KEY = os.getenv("APP_API_KEY")
 
 st.title("Crypto P&L Tracker")
 
@@ -18,15 +23,23 @@ if st.button("Get Price"):
     url = f"https://crypto-pnl-api.onrender.com/price/{coin}"
     response = requests.get(url)
     data = response.json()
-    st.metric(label=f"{coin} price", value=data["price"])
+    if response.status_code == 200:
+        st.metric(label=f"{coin} price", value=data["price"])
+    else:
+        error_detail = data.get("detail", "Unknown error")
+        st.error(f"Error: {error_detail}")  
 
 # Show transactions
 if st.button("Show All Transactions"):
     url = "https://crypto-pnl-api.onrender.com/transactions"
-    response = requests.get(url)
-    data = response.json()
-    df = pd.DataFrame(data)
-    st.dataframe(df)
+    response = requests.get(url, headers={"x-api-key": API_KEY})
+    if response.status_code == 200:
+        data = response.json()
+        df = pd.DataFrame(data)
+        st.dataframe(df)
+    else:
+        error_detail = response.json().get("detail", "Unknown error")
+        st.error(f"Error: {error_detail}")      
 
 # POST new transaction
 st.subheader("Log your new transaction here ⬇")
@@ -45,7 +58,7 @@ infor = {
 
 if st.button("Add Transaction"):
     url = "https://crypto-pnl-api.onrender.com/transaction"
-    response = requests.post(url, json=infor)
+    response = requests.post(url, headers={"x-api-key": API_KEY}, json=infor)
     if response.status_code == 200:
         st.success("New transaction is saved successfully!")
     else:

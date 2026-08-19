@@ -25,6 +25,9 @@ The API is now at **v1.0**. In this version, you can:
 
 * **Framework:** FastAPI
 * **Database:** PostgreSQL
+* **Test:** Pytest
+* **CI:** GitHub Actions
+* **Frontend:** Streamlit
 * **Deployment:** Render + Docker
 
 ## API Endpoints
@@ -47,15 +50,17 @@ Returns basic information about the API, including its name, version, features, 
 
 **Method:** POST
 
+**Requires API key**
+
 **Description:**
 Log a new transaction in the database.
 
 The transaction details include:
 
 * Coin name
-* Action (buy or sell)
-* Amount (total coin amount of the transaction)
-* Price (buy or sell price)
+* Action, either buy or sell
+* Amount, which is the total amount of coins in that transaction
+* Price, which is the buy or sell price
 
 The API will then calculate the total weight of the transaction:
 
@@ -84,12 +89,16 @@ If the coin doesn't exist or there is a typo, the API will return:
 
 **Method:** GET
 
+**Requires API key**
+
 **Description:**
 Get the details of all transaction history.
 
 ### 6. `/transactions/{id}`
 
 **Method:** GET
+
+**Requires API key**
 
 **Description:**
 Each transaction has its own ID. You can query any transaction by entering its ID.
@@ -100,6 +109,8 @@ The API will return the details of the corresponding transaction.
 
 **Method:** DELETE
 
+**Requires API key**
+
 **Description:**
 Delete any transaction by entering its ID.
 
@@ -107,12 +118,39 @@ Delete any transaction by entering its ID.
 
 **Method:** PUT
 
+**Requires API key**
+
 **Description:**
 Update any transaction when you need to fix or change its details.
 
 To do this, you need to provide the transaction ID and the new details you want to update.
 
 The API will return a success message once the transaction has been successfully updated.
+
+## Authentication
+
+Among the 8 endpoints above, only 3 are open to the public:
+
+* GET `/`
+* GET `/about`
+* GET `/price/{coin_id}`
+
+The other 5 require an API key:
+
+* POST `/transaction`
+* GET `/transactions`
+* GET `/transactions/{id}`
+* DELETE `/transactions/{id}`
+* PUT `/transactions/{id}`
+
+The API key is passed through the request header as `X-API-Key`.
+
+Here's an example using the GET `/transactions` endpoint:
+
+```bash
+curl -H "X-API-Key: your-api-key-here" \
+  https://crypto-pnl-api.onrender.com/transactions
+```
 
 ## Running Locally
 
@@ -143,6 +181,7 @@ Create a `.env` file with:
 ```env
 DATABASE_URL=your_postgres_connection_string
 COINGECKO_API_KEY=your_coingecko_api_key
+APP_API_KEY=your-api-key
 ```
 
 ### 5. Run the server
@@ -159,9 +198,50 @@ Go to:
 
 From there, you can explore and test the API.
 
+## Running Tests
+
+While running tests for the API endpoints, I wanted to avoid touching the production database. That's why there is a separate database used only for testing.
+
+Add the following to your `.env`:
+
+```env
+TEST_DATABASE_URL=your_test_postgres_connection_string
+```
+
+Then run:
+
+```bash
+python -m pytest
+```
+
+## Rotating the API Key
+
+If there are any problems with the API key, make sure to rotate it as soon as possible.
+
+You can generate a new key with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+After rotating the key, update it in these 4 places:
+
+1. `fastapi-pnl/.env` for the local API
+2. `streamlit-pnl/.env` for the local frontend
+3. Render → Environment → `APP_API_KEY` for production
+4. GitHub → Settings → Secrets → `APP_API_KEY` for CI
+
 ## Future Improvements
 
-### 1. Entry Price & Position ROI
+### 1. Rate Limiting for GET `/price/{coin_id}`
+
+Since there are only 3 public endpoints and this is probably the most valuable one for users, I think it will be used the most once the app becomes public.
+
+At the same time, the CoinGecko API has a limited number of requests per minute.
+
+That's why I plan to add rate limiting for each IP address, so there is a lower chance of users running into issues while using the API.
+
+### 2. Entry Price & Position ROI
 
 At the moment, all transactions are disconnected from each other.
 
@@ -169,7 +249,7 @@ For the next version, if multiple transactions have the same coin ID, the API wi
 
 From there, combined with the real-time price from CoinGecko, users will be able to see the ROI of each position, including whether it is in the red or green and by how much.
 
-### 2. Portfolio ROI
+### 3. Portfolio ROI
 
 The transaction details will give a clear picture of the principal capital a user has put into their portfolio.
 
@@ -177,7 +257,7 @@ Combined with the position ROI, the API will calculate and return the overall RO
 
 All of this will be updated in real time thanks to the CoinGecko API.
 
-### 3. TP/SL
+### 4. TP/SL
 
 The vision goes beyond just managing a portfolio. I also want this API to help users rebalance their positions.
 
@@ -185,7 +265,7 @@ The end goal is to connect the API with a trading bot, where users can set TP (T
 
 Once the price reaches the target, the API will execute the order through the trading bot and update the portfolio accordingly.
 
-All information will be communicated to the users before and after the order goes through.
+All information will be communicated to users before and after the order goes through.
 
 ## Final Vision
 
